@@ -10,3 +10,5 @@ seaborn>=0.12.0
 pillow>=9.5.0
 jupyter
 pydantic>=2.0
+langchain-community>=0.3.0
+langchain-core>=0.3.0
