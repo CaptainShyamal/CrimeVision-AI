@@ -78,12 +78,20 @@ export default function IngestionZone() {
             <p className="font-semibold text-lg">AI Engine Processing...</p>
             <p className="text-sm mt-1">Extracting embeddings & calculating Sinkhorn cost</p>
           </div>
-        ) : uploadResult?.status === "success" ? (
-          <div className="flex flex-col items-center text-green-400">
+       ) : uploadResult?.status === "success" ? (
+          <div className="flex flex-col items-center text-green-400 w-full text-center">
             <CheckCircle size={48} className="mb-4" />
             <p className="font-semibold text-lg">Analysis Complete!</p>
             <p className="text-sm mt-1 text-slate-300">Cost: <span className="font-bold text-white">{uploadResult.sinkhorn_alignment_cost}</span></p>
             <p className="text-xs mt-1 text-slate-400">{uploadResult.graph_status}</p>
+            
+            {/* NEW: Display the Llama-3 Audit Report */}
+            {uploadResult.audit_report && (
+                <div className="mt-4 p-4 bg-slate-900 border border-slate-600 rounded-lg text-slate-300 text-sm text-left w-full shadow-inner">
+                    <strong className="text-blue-400 block mb-2 font-mono uppercase tracking-wider">⚖️ Llama-3 Audit Log:</strong>
+                    {uploadResult.audit_report}
+                </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center">
