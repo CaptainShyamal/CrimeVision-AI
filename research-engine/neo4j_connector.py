@@ -8,7 +8,32 @@ class KnowledgeGraphEngine:
 
     def close(self):
         self.driver.close()
+        
+    def get_case_context(self, case_id):
+        """
+        GraphRAG Retrieval: Fetches the entire history of a case from Neo4j 
+        so Llama-3 can read it before generating the audit log.
+        """
+        query = """
+        MATCH (c:Case {id: $case_id})
+        OPTIONAL MATCH (t:WitnessStatement)-[r:CORRELATES_TO]->(v:VisualEvidence)
+        WHERE (c)-[:CONTAINS]->(t) AND (c)-[:CONTAINS]->(v)
+        RETURN t.text AS statement, v.filename AS video, r.sinkhorn_cost AS cost, r.flagged_contradiction AS is_contradiction
+        """
+        
+        with self.driver.session() as session:
+            result = session.run(query, case_id=case_id)
+            records = result.data()
 
+        if not records or all(r['statement'] is None for r in records):
+            return "No previous evidence history found in the graph for this case."
+
+        context = "CASE GRAPH HISTORY:\n"
+        for row in records:
+            if row['statement'] and row['video']:
+                context += f"- Past Statement: '{row['statement']}' | Past Video: '{row['video']}' | Mathematical Cost: {row['cost']}\n"
+        
+        return context
     def create_evidential_link(self, case_id, evidence_filename, statement_text, sinkhorn_cost):
         """
         Creates nodes and edges in Neo4j representing the AI's analysis.
@@ -53,3 +78,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Connection Failed: {e}")
         print("Make sure your Neo4j Docker container is running!")
+check the intendation and donot change the context
