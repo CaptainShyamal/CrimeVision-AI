@@ -11,8 +11,9 @@ from sentence_transformers import SentenceTransformer
 from transformers import CLIPProcessor, CLIPVisionModelWithProjection
 import warnings
 
-# --- NEW: Import our Neo4j Connector ---
+# --- Neo4j and Local LLM Imports ---
 from neo4j_connector import KnowledgeGraphEngine
+from langchain_community.llms import Ollama
 
 warnings.filterwarnings("ignore")
 
@@ -30,7 +31,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 sbert_model = None
 clip_model = None
 clip_processor = None
-kg_engine = None  # Holds our database connection
+kg_engine = None  
 
 @app.on_event("startup")
 async def load_ai_models():
@@ -80,9 +81,26 @@ def extract_keyframe_from_video(video_bytes):
         if os.path.exists(temp_video_path):
             os.remove(temp_video_path)
 
+def generate_audit_report(sinkhorn_cost, statement_text, evidence_filename):
+    """Passes the mathematical cost to Llama-3 to write a summary."""
+    print("🧠 Asking Llama-3 to generate the forensic audit log...")
+    # Setting temperature=0 so the legal audit is strictly factual and consistent
+    llm = Ollama(model="llama3", temperature=0)
+    prompt = f"""
+    You are an AI Forensic Analyst. Review the following evidence alignment.
+    
+    Evidence File: {evidence_filename}
+    Witness Statement: {statement_text}
+    Mathematical Contradiction Cost: {sinkhorn_cost} (A score above 1.15 is highly suspicious)
+    
+    Write a brief, 2-sentence audit log summarizing if the statement matches the video evidence.
+    Keep it professional and objective.
+    """
+    return llm.invoke(prompt)
+
 @app.post("/analyze_evidence/")
 async def analyze_evidence(
-    case_id: str = Form("CASE-2026-001"),  # Automatically groups evidence into a case
+    case_id: str = Form("CASE-2026-001"),  
     evidence_file: UploadFile = File(...),
     statement_text: str = Form(None), 
     statement_file: UploadFile = File(None)
@@ -104,7 +122,7 @@ async def analyze_evidence(
     else:
         image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
     
-    # AI Engine Math
+    # 1. Math Engine
     inputs = clip_processor(images=[image], return_tensors="pt", padding=True).to(device)
     with torch.no_grad():
         vision_features = clip_model(**inputs).image_embeds
@@ -124,7 +142,7 @@ async def analyze_evidence(
         ot_plan = sinkhorn_knopp(cost_matrix)
         final_cost = cost_matrix[0][0].item()
 
-    # --- NEW: SAVE TO KNOWLEDGE GRAPH ---
+    # 2. Save to Neo4j
     try:
         kg_engine.create_evidential_link(
             case_id=case_id,
@@ -136,10 +154,17 @@ async def analyze_evidence(
     except Exception as e:
         graph_status = f"Neo4j Error: {str(e)}"
 
+    # 3. Trigger Llama-3
+    try:
+        audit_report = generate_audit_report(round(final_cost, 4), final_statement, evidence_file.filename)
+    except Exception as e:
+        audit_report = f"LLM Error: {str(e)}"
+
     return {
         "status": "success",
         "case_id": case_id,
         "evidence_processed": evidence_file.filename,
         "sinkhorn_alignment_cost": round(final_cost, 4),
-        "graph_status": graph_status
+        "graph_status": graph_status,
+        "audit_report": audit_report  # <-- We are now sending the Llama-3 text to React!
     }
