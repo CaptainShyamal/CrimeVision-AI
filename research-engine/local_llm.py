@@ -8,7 +8,7 @@ def generate_audit_report(sinkhorn_cost, statement_text, evidence_filename):
     print("🧠 Waking up local Llama-3 Model...")
     
     # Connect to the Ollama service running in the background
-    llm = Ollama(model="llama3")
+    llm = Ollama(model="llama3", temperature=0)
     
     # Create the prompt combining our math and evidence
     prompt = f"""
