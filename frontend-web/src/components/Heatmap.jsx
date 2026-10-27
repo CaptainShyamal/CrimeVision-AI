@@ -1,77 +1,133 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Layers, Sparkles, HelpCircle, Eye, UploadCloud } from 'lucide-react';
 
-/**
- * HEATMAP COMPONENT (MODULE 6 & 9)
- * Visually renders the output of the Evidential Optimal Transport PyTorch script.
- * Demonstrates to the faculty how visual uncertainty dampens contradiction scores.
- */
-export default function Heatmap({ data, visualUncertainty }) {
-  // Dummy tokens and patches for the August 17 Mockup
-  const tokens = ["Suspect", "wore", "a", "red", "jacket"];
-  const patches = ["Patch 1", "Patch 2", "Patch 3"];
+export default function Heatmap({ data = [], tokens = [], patches = [], visualUncertainty, evidenceName, cost }) {
+  const [hoveredCell, setHoveredCell] = useState(null);
 
-  // If data is null, use fallback mockup data
-  const matrix = data || [
-    [0.1, 0.1, 0.1, 0.8, 0.9],
-    [0.2, 0.1, 0.1, 0.2, 0.3],
-    [0.1, 0.2, 0.1, 0.1, 0.1],
-  ];
+  const hasData = data && data.length > 0 && tokens && tokens.length > 0;
+  const uncertainty = typeof visualUncertainty === 'number' ? visualUncertainty : 0.0;
+  const isContra = cost !== undefined && cost !== null && (cost > 1.15);
+  const isHighUncertainty = uncertainty > 0.5;
 
-  // Dynamic styling based on Track 1 Uncertainty Math
-  const isHighUncertainty = visualUncertainty > 0.5;
-  const badgeColor = isHighUncertainty ? "bg-yellow-500" : "bg-red-500";
-  const badgeText = isHighUncertainty ? "High Visual Doubt (Penalty Dampened)" : "High Confidence Contradiction";
+  const badgeColor = isContra 
+    ? "bg-red-950/80 text-red-300 border border-red-700"
+    : isHighUncertainty
+      ? "bg-amber-950/80 text-amber-300 border border-amber-700"
+      : "bg-emerald-950/80 text-emerald-300 border border-emerald-700";
+
+  const badgeText = isContra
+    ? "⚠️ Contradiction Flagged (> 1.15)"
+    : isHighUncertainty
+      ? "High Visual Doubt (Dampened)"
+      : "✅ Verified Congruent (≤ 1.15)";
 
   return (
-    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-lg">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-bold text-slate-100">Evidential OT Alignment</h3>
-        <span className={`px-3 py-1 rounded-full text-xs font-bold text-white ${badgeColor}`}>
-          {badgeText}
-        </span>
+    <div className="bg-slate-800/95 backdrop-blur-md p-5 rounded-2xl border border-slate-700/80 shadow-2xl flex flex-col space-y-3">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400">
+            <Layers size={18} />
+          </div>
+          <div>
+            <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
+              Evidential Optimal Transport Alignment Matrix
+            </h3>
+            {evidenceName ? (
+              <p className="text-[11px] text-blue-300 font-mono">Target: <span className="font-bold">{evidenceName}</span></p>
+            ) : (
+              <p className="text-[11px] text-slate-400">Awaiting media & statement ingestion</p>
+            )}
+          </div>
+        </div>
+        {hasData && (
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${badgeColor}`}>
+            {badgeText}
+          </span>
+        )}
       </div>
       
-      <p className="text-sm text-slate-400 mb-4">
-        Matrix maps witness statement tokens against CCTV visual patches. 
-        Uncertainty Score: <strong className="text-white">{(visualUncertainty * 100).toFixed(1)}%</strong>
-      </p>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-center border-collapse">
-          <thead>
-            <tr>
-              <th className="p-2 border border-slate-600 text-slate-300"></th>
-              {tokens.map((token, i) => (
-                <th key={i} className="p-2 border border-slate-600 font-mono text-sm text-blue-400">{token}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {matrix.map((row, i) => (
-              <tr key={i}>
-                <td className="p-2 border border-slate-600 font-mono text-sm text-slate-300">{patches[i]}</td>
-                {row.map((val, j) => {
-                  // Color intensity based on mathematical alignment score
-                  const intensity = Math.floor(val * 255);
-                  const cellColor = isHighUncertainty 
-                    ? `rgba(234, 179, 8, ${val})` // Yellow for uncertain
-                    : `rgba(239, 68, 68, ${val})`; // Red for confident contradiction
-
-                  return (
-                    <td 
-                      key={j} 
-                      className="p-2 border border-slate-600 text-slate-900 font-bold"
-                      style={{ backgroundColor: cellColor }}
-                    >
-                      {val.toFixed(2)}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Info Banner */}
+      <div className="flex flex-wrap items-center justify-between bg-slate-900/80 p-2.5 rounded-xl border border-slate-700/60 text-xs text-slate-300 gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-slate-400">Cross-referencing witness text tokens with CCTV spatial patches.</span>
+        </div>
+        {hasData && (
+          <div className="flex items-center gap-4 font-mono text-[11px]">
+            <span>Visual Uncertainty: <strong className="text-amber-400">{(uncertainty * 100).toFixed(1)}%</strong></span>
+            {cost !== undefined && cost !== null && (
+              <span>Sinkhorn Score: <strong className={isContra ? "text-red-400 font-bold" : "text-emerald-400 font-bold"}>{typeof cost === 'number' ? cost.toFixed(4) : cost}</strong></span>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Heatmap Table or Empty State */}
+      {!hasData ? (
+        <div className="rounded-xl border border-slate-700/80 bg-slate-950 p-10 flex flex-col items-center justify-center text-center space-y-2">
+          <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-500">
+            <Layers size={32} />
+          </div>
+          <p className="text-sm font-bold text-slate-300">No Optimal Transport Matrix Generated Yet</p>
+          <p className="text-xs text-slate-500 max-w-sm">
+            Upload digital evidence and a transcript to compute Dirichlet epistemic uncertainty & Sinkhorn cross-modal divergence.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-700/80 bg-slate-950">
+          <table className="w-full text-center border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-900/90 font-mono text-[11px] text-slate-400">
+                <th className="p-2.5 border border-slate-700/80 text-left font-semibold">Visual Zone / Token</th>
+                {tokens.map((token, i) => (
+                  <th key={i} className="p-2.5 border border-slate-700/80 font-mono text-xs font-bold text-blue-300 bg-slate-800/60">
+                    {token}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row, i) => (
+                <tr key={i} className="hover:bg-slate-800/30 transition-colors">
+                  <td className="p-2.5 border border-slate-700/80 font-mono text-xs text-left text-slate-300 bg-slate-900/60 font-semibold">
+                    {patches[i] || `Patch ${i + 1}`}
+                  </td>
+                  {row.map((val, j) => {
+                    const normalizedVal = Math.min(Math.max(val, 0), 1.5);
+                    const isHovered = hoveredCell && hoveredCell.row === i && hoveredCell.col === j;
+                    
+                    const cellBg = val > 1.15
+                      ? `rgba(220, 38, 38, ${Math.min(0.85, Math.max(0.2, (val - 1.0) * 1.5))})`
+                      : `rgba(16, 185, 129, ${Math.min(0.75, Math.max(0.15, (1.15 - val) * 1.2))})`;
+
+                    return (
+                      <td 
+                        key={j} 
+                        onMouseEnter={() => setHoveredCell({ row: i, col: j, val, token: tokens[j], patch: patches[i] })}
+                        onMouseLeave={() => setHoveredCell(null)}
+                        className={`p-2.5 border border-slate-700/80 text-slate-100 font-mono font-bold text-xs cursor-pointer transition-all ${
+                          isHovered ? 'ring-2 ring-blue-400 scale-105 z-10' : ''
+                        }`}
+                        style={{ backgroundColor: cellBg }}
+                      >
+                        {val.toFixed(2)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Hover Cell Inspector */}
+      {hoveredCell && (
+        <div className="p-2 bg-slate-900 border border-slate-700 rounded-lg text-[11px] text-slate-300 flex items-center justify-between font-mono animate-fadeIn">
+          <span>Patch: <strong className="text-white">{hoveredCell.patch}</strong> &harr; Token: <strong className="text-blue-300">"{hoveredCell.token}"</strong></span>
+          <span>Alignment Cost: <strong className="text-amber-400">{hoveredCell.val.toFixed(3)}</strong></span>
+        </div>
+      )}
     </div>
   );
 }

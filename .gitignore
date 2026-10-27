@@ -55,3 +55,6 @@ database_data/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local media / generated test videos
+cctv_degraded.mp4

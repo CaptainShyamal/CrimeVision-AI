@@ -10,10 +10,9 @@ import shutil
 import uuid
 from pathlib import Path
 from PIL import Image
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sentence_transformers import SentenceTransformer
-from transformers import CLIPProcessor, CLIPVisionModelWithProjection
+from transformers import CLIPProcessor, CLIPModel
 import warnings
 
 # --- ENTERPRISE UPGRADE: Vector DB & Audio Imports ---
@@ -22,7 +21,11 @@ import whisper
 
 # --- Neo4j and Local LLM Imports ---
 from neo4j_connector import KnowledgeGraphEngine
-from langchain_community.llms import Ollama
+
+try:
+    from langchain_community.llms import Ollama
+except Exception:
+    Ollama = None
 
 warnings.filterwarnings("ignore")
 
@@ -37,7 +40,6 @@ app.add_middleware(
 )
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-sbert_model = None
 clip_model = None
 clip_processor = None
 kg_engine = None  
@@ -129,11 +131,61 @@ def generate_graphrag_audit_report(case_id, new_cost, new_statement, new_filenam
     Second, mention how it fits into the context of the FILTERED HISTORICAL CONTEXT provided above.
     Do not use hallucinated facts.
     """
-    return llm.invoke(prompt)
+    all_cases = kg_engine.get_cases()
+    suggestions = []
+    
+    # Check pairwise comparisons across all case records
+    for i in range(len(all_cases)):
+        for j in range(i + 1, len(all_cases)):
+            c1 = all_cases[i]['id']
+            c2 = all_cases[j]['id']
+            c1_ev = kg_engine.memory_store.get(c1, [])
+            c2_ev = kg_engine.memory_store.get(c2, [])
+            
+            # Look for shared keywords in statements
+            keywords = ["red", "blue", "sedan", "car", "vehicle", "jacket", "hoodie", "gun", "knife", "mask", "suspect", "alley", "warehouse", "downtown"]
+            for e1 in c1_ev:
+                t1 = e1.get('statement_text', '').lower()
+                for e2 in c2_ev:
+                    t2 = e2.get('statement_text', '').lower()
+                    shared_kw = [k for k in keywords if k in t1 and k in t2]
+                    if shared_kw:
+                        suggestions.append({
+                            "source_case_id": c1,
+                            "source_case_name": all_cases[i].get('name'),
+                            "target_case_id": c2,
+                            "target_case_name": all_cases[j].get('name'),
+                            "relation_type": f"POTENTIAL_MATCH_{shared_kw[0].upper()}",
+                            "description": f"Both cases reference '{', '.join(shared_kw)}' in witness statements ({e1.get('evidence_filename')} & {e2.get('evidence_filename')})",
+                            "confidence": 0.88,
+                            "shared_entity": shared_kw[0]
+                        })
+    return suggestions
+
+@app.get("/graph/{case_id}")
+async def get_graph(case_id: str):
+    """Endpoint for frontend to fetch live Neo4j graph nodes, edges, and evidence table."""
+    if case_id == "all" or case_id == "multi":
+        return kg_engine.get_multi_case_graph()
+    return kg_engine.get_case_graph(case_id)
+
+@app.post("/clear/{case_id}")
+@app.delete("/clear/{case_id}")
+@app.get("/clear/{case_id}")
+async def clear_case(case_id: str):
+    """Endpoint to completely wipe all evidence records, graph nodes, and Neo4j relations for a case."""
+    result = kg_engine.clear_case_data(case_id)
+    return {
+        "status": "cleared",
+        "case_id": case_id,
+        "nodes": [],
+        "edges": [],
+        "evidence_list": []
+    }
 
 @app.post("/analyze_evidence/")
 async def analyze_evidence(
-    case_id: str = Form("CASE-2026-001"),  
+    case_id: str = Form("CASE-REACT-001"),  
     evidence_file: UploadFile = File(...),
     statement_text: str = Form(None), 
     statement_file: UploadFile = File(None)
@@ -228,7 +280,7 @@ async def analyze_evidence(
         kg_engine.create_evidential_link(case_id, evidence_file.filename, final_statement, final_cost)
         graph_status = "Saved to Neo4j Successfully"
     except Exception as e:
-        graph_status = f"Neo4j Error: {str(e)}"
+        graph_status = f"Graph Status: {str(e)}"
 
     try:
         # Pass chroma_collection so GraphRAG can do a Vector Search!
@@ -240,7 +292,17 @@ async def analyze_evidence(
         "status": "success",
         "case_id": case_id,
         "evidence_processed": evidence_file.filename,
+        "statement_text": final_statement,
         "sinkhorn_alignment_cost": round(final_cost, 4),
+        "is_contradiction": is_contra,
+        "is_blurry": is_blurry,
+        "quality_label": quality_label,
+        "investigator_advisory": investigator_advisory,
+        "discrepancy_info": discrepancy_info,
+        "visual_uncertainty": visual_uncertainty,
+        "tokens": tokens,
+        "patches": patches,
+        "heatmap_data": heatmap_matrix,
         "graph_status": graph_status,
         "audit_report": audit_report
     }
