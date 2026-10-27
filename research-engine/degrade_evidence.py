@@ -9,7 +9,8 @@ def degrade_frame(frame):
     v = cv2.subtract(v, 70) # Reduce brightness
     v = np.clip(v, 0, 255)
     hsv = cv2.merge((h, s, v))
-    dark_frame = cv2.cvtColor(hsv, cv2.HSV_BGR)
+    # FIXED: The correct OpenCV flag is cv2.COLOR_HSV2BGR
+    dark_frame = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR) 
 
     # 2. Add Gaussian Blur (Out-of-focus / cheap lens simulation)
     blurred_frame = cv2.GaussianBlur(dark_frame, (21, 21), 0)
